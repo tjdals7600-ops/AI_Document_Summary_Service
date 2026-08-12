@@ -22,6 +22,6 @@ public class DocumentController {
 
     @PostMapping("/summarize")
     public String summarize(@RequestParam("file") MultipartFile file) throws IOException {
-        return documentService.extractText(file);
+        return documentService.summarizeDocument(file);
     }
 }

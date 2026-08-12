@@ -13,6 +13,17 @@ import org.springframework.web.multipart.MultipartFile;
 @Service
 public class DocumentService {
 
+    private final AiSummaryService aiSummaryService;
+
+    public DocumentService(AiSummaryService aiSummaryService) {
+        this.aiSummaryService = aiSummaryService;
+    }
+
+    public String summarizeDocument(MultipartFile file) throws IOException {
+        String documentText = extractText(file);
+        return aiSummaryService.summarize(documentText);
+    }
+
     public String extractText(MultipartFile file) throws IOException {
         String fileName = file.getOriginalFilename();
 

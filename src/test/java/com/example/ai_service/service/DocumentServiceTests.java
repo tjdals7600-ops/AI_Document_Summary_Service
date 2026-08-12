@@ -1,6 +1,8 @@
 package com.example.ai_service.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -18,16 +20,21 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 @SpringBootTest(properties = "spring.ai.openai.api-key=test-key")
 @AutoConfigureMockMvc
 class DocumentServiceTests {
 
-    private final DocumentService documentService = new DocumentService();
+    @Autowired
+    private DocumentService documentService;
 
     @Autowired
     private MockMvc mockMvc;
+
+    @MockitoBean
+    private AiSummaryService aiSummaryService;
 
     @Test
     void extractsTextFromTxtFile() throws Exception {
@@ -58,17 +65,52 @@ class DocumentServiceTests {
     }
 
     @Test
-    void uploadsPdfAndReturnsExtractedText() throws Exception {
+    void sendsExtractedTxtTextToAiSummaryService() throws Exception {
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "sample.txt",
+                "text/plain",
+                "TXT document content".getBytes(StandardCharsets.UTF_8)
+        );
+        when(aiSummaryService.summarize("TXT document content")).thenReturn("TXT summary");
+
+        String summary = documentService.summarizeDocument(file);
+
+        assertThat(summary).isEqualTo("TXT summary");
+        verify(aiSummaryService).summarize("TXT document content");
+    }
+
+    @Test
+    void sendsExtractedPdfTextToAiSummaryService() throws Exception {
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "sample.pdf",
+                "application/pdf",
+                createPdf("PDF document content")
+        );
+        when(aiSummaryService.summarize(org.mockito.ArgumentMatchers.contains("PDF document content")))
+                .thenReturn("PDF summary");
+
+        String summary = documentService.summarizeDocument(file);
+
+        assertThat(summary).isEqualTo("PDF summary");
+        verify(aiSummaryService).summarize(org.mockito.ArgumentMatchers.contains("PDF document content"));
+    }
+
+    @Test
+    void uploadsPdfAndReturnsAiSummary() throws Exception {
         MockMultipartFile file = new MockMultipartFile(
                 "file",
                 "sample.pdf",
                 "application/pdf",
                 createPdf("Uploaded PDF content")
         );
+        when(aiSummaryService.summarize(org.mockito.ArgumentMatchers.contains("Uploaded PDF content")))
+                .thenReturn("AI summary result");
 
         mockMvc.perform(multipart("/api/documents/summarize").file(file))
                 .andExpect(status().isOk())
-                .andExpect(content().string(org.hamcrest.Matchers.containsString("Uploaded PDF content")));
+                .andExpect(content().string("AI summary result"));
     }
 
     private byte[] createPdf(String text) throws Exception {
