@@ -24,8 +24,16 @@ public class DocumentService {
     }
 
     public SummaryResponse summarizeDocument(MultipartFile file) throws IOException {
+        validateFile(file);
         String documentText = extractText(file);
-        String aiResponse = aiSummaryService.summarize(documentText);
+        validateDocumentText(documentText);
+
+        String aiResponse;
+        try {
+            aiResponse = aiSummaryService.summarize(documentText);
+        } catch (RuntimeException exception) {
+            throw new IllegalStateException("AI 요약 서비스 호출에 실패했습니다.", exception);
+        }
 
         return new SummaryResponse(
                 file.getOriginalFilename(),
@@ -36,12 +44,35 @@ public class DocumentService {
 
     public String extractText(MultipartFile file) throws IOException {
         String fileName = file.getOriginalFilename();
+        String lowerCaseFileName = fileName.toLowerCase(Locale.ROOT);
 
-        if (fileName != null && fileName.toLowerCase(Locale.ROOT).endsWith(".pdf")) {
+        if (lowerCaseFileName.endsWith(".pdf")) {
             return extractPdfText(file);
         }
 
         return extractTxtText(file);
+    }
+
+    private void validateFile(MultipartFile file) {
+        if (file.isEmpty()) {
+            throw new IllegalArgumentException("파일이 비어 있습니다.");
+        }
+
+        String fileName = file.getOriginalFilename();
+        if (fileName == null || fileName.isBlank()) {
+            throw new IllegalArgumentException("파일 이름이 없습니다.");
+        }
+
+        String lowerCaseFileName = fileName.toLowerCase(Locale.ROOT);
+        if (!lowerCaseFileName.endsWith(".pdf") && !lowerCaseFileName.endsWith(".txt")) {
+            throw new IllegalArgumentException("PDF 또는 TXT 파일만 업로드할 수 있습니다.");
+        }
+    }
+
+    private void validateDocumentText(String documentText) throws IOException {
+        if (documentText.isBlank()) {
+            throw new IOException("문서 내용을 읽을 수 없습니다.");
+        }
     }
 
     private String extractTxtText(MultipartFile file) throws IOException {

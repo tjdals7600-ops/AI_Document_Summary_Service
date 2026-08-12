@@ -1,6 +1,7 @@
 package com.example.ai_service.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
@@ -121,6 +122,85 @@ class DocumentServiceTests {
                 .andExpect(jsonPath("$.keyPoints[0]").value("First point"))
                 .andExpect(jsonPath("$.keyPoints[1]").value("Second point"))
                 .andExpect(jsonPath("$.keyPoints[2]").value("Third point"));
+    }
+
+    @Test
+    void rejectsEmptyFile() throws Exception {
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "empty.txt",
+                "text/plain",
+                new byte[0]
+        );
+
+        mockMvc.perform(multipart("/api/documents/summarize").file(file))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("파일이 비어 있습니다."));
+    }
+
+    @Test
+    void rejectsUnsupportedFileExtension() throws Exception {
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "sample.docx",
+                "application/octet-stream",
+                "document content".getBytes(StandardCharsets.UTF_8)
+        );
+
+        mockMvc.perform(multipart("/api/documents/summarize").file(file))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("PDF 또는 TXT 파일만 업로드할 수 있습니다."));
+    }
+
+    @Test
+    void rejectsRequestWithoutFile() throws Exception {
+        mockMvc.perform(multipart("/api/documents/summarize"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("업로드할 파일이 필요합니다."));
+    }
+
+    @Test
+    void returnsErrorWhenPdfCannotBeRead() throws Exception {
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "broken.pdf",
+                "application/pdf",
+                "not a pdf".getBytes(StandardCharsets.UTF_8)
+        );
+
+        mockMvc.perform(multipart("/api/documents/summarize").file(file))
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath("$.message").value("문서 내용을 읽을 수 없습니다."));
+    }
+
+    @Test
+    void returnsErrorWhenDocumentTextIsBlank() throws Exception {
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "blank.txt",
+                "text/plain",
+                "   \n  ".getBytes(StandardCharsets.UTF_8)
+        );
+
+        mockMvc.perform(multipart("/api/documents/summarize").file(file))
+                .andExpect(status().isUnprocessableContent())
+                .andExpect(jsonPath("$.message").value("문서 내용을 읽을 수 없습니다."));
+    }
+
+    @Test
+    void returnsErrorWhenAiSummaryFails() throws Exception {
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "sample.txt",
+                "text/plain",
+                "TXT document content".getBytes(StandardCharsets.UTF_8)
+        );
+        doThrow(new RuntimeException("OpenAI error"))
+                .when(aiSummaryService).summarize("TXT document content");
+
+        mockMvc.perform(multipart("/api/documents/summarize").file(file))
+                .andExpect(status().isBadGateway())
+                .andExpect(jsonPath("$.message").value("AI 요약 서비스 호출에 실패했습니다."));
     }
 
     private byte[] createPdf(String text) throws Exception {
