@@ -4,11 +4,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
+
+import com.example.ai_service.dto.SummaryResponse;
 
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
@@ -74,9 +76,11 @@ class DocumentServiceTests {
         );
         when(aiSummaryService.summarize("TXT document content")).thenReturn("TXT summary");
 
-        String summary = documentService.summarizeDocument(file);
+        SummaryResponse response = documentService.summarizeDocument(file);
 
-        assertThat(summary).isEqualTo("TXT summary");
+        assertThat(response.fileName()).isEqualTo("sample.txt");
+        assertThat(response.summary()).isEqualTo("TXT summary");
+        assertThat(response.keyPoints()).isEmpty();
         verify(aiSummaryService).summarize("TXT document content");
     }
 
@@ -89,11 +93,13 @@ class DocumentServiceTests {
                 createPdf("PDF document content")
         );
         when(aiSummaryService.summarize(org.mockito.ArgumentMatchers.contains("PDF document content")))
-                .thenReturn("PDF summary");
+                .thenReturn("PDF summary\n- PDF key point");
 
-        String summary = documentService.summarizeDocument(file);
+        SummaryResponse response = documentService.summarizeDocument(file);
 
-        assertThat(summary).isEqualTo("PDF summary");
+        assertThat(response.fileName()).isEqualTo("sample.pdf");
+        assertThat(response.summary()).isEqualTo("PDF summary");
+        assertThat(response.keyPoints()).containsExactly("PDF key point");
         verify(aiSummaryService).summarize(org.mockito.ArgumentMatchers.contains("PDF document content"));
     }
 
@@ -106,11 +112,15 @@ class DocumentServiceTests {
                 createPdf("Uploaded PDF content")
         );
         when(aiSummaryService.summarize(org.mockito.ArgumentMatchers.contains("Uploaded PDF content")))
-                .thenReturn("AI summary result");
+                .thenReturn("AI summary result\n- First point\n* Second point\n• Third point");
 
         mockMvc.perform(multipart("/api/documents/summarize").file(file))
                 .andExpect(status().isOk())
-                .andExpect(content().string("AI summary result"));
+                .andExpect(jsonPath("$.fileName").value("sample.pdf"))
+                .andExpect(jsonPath("$.summary").value("AI summary result"))
+                .andExpect(jsonPath("$.keyPoints[0]").value("First point"))
+                .andExpect(jsonPath("$.keyPoints[1]").value("Second point"))
+                .andExpect(jsonPath("$.keyPoints[2]").value("Third point"));
     }
 
     private byte[] createPdf(String text) throws Exception {
