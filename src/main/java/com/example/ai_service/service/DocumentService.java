@@ -2,7 +2,11 @@ package com.example.ai_service.service;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
+
+import com.example.ai_service.dto.SummaryResponse;
 
 import org.apache.pdfbox.Loader;
 import org.apache.pdfbox.pdmodel.PDDocument;
@@ -19,9 +23,15 @@ public class DocumentService {
         this.aiSummaryService = aiSummaryService;
     }
 
-    public String summarizeDocument(MultipartFile file) throws IOException {
+    public SummaryResponse summarizeDocument(MultipartFile file) throws IOException {
         String documentText = extractText(file);
-        return aiSummaryService.summarize(documentText);
+        String aiResponse = aiSummaryService.summarize(documentText);
+
+        return new SummaryResponse(
+                file.getOriginalFilename(),
+                extractSummary(aiResponse),
+                extractKeyPoints(aiResponse)
+        );
     }
 
     public String extractText(MultipartFile file) throws IOException {
@@ -42,5 +52,35 @@ public class DocumentService {
         try (PDDocument document = Loader.loadPDF(file.getBytes())) {
             return new PDFTextStripper().getText(document);
         }
+    }
+
+    private String extractSummary(String aiResponse) {
+        List<String> summaryLines = new ArrayList<>();
+
+        for (String line : aiResponse.lines().toList()) {
+            String trimmedLine = line.trim();
+            if (!trimmedLine.isEmpty() && !isBulletPoint(trimmedLine)) {
+                summaryLines.add(trimmedLine);
+            }
+        }
+
+        return String.join(System.lineSeparator(), summaryLines);
+    }
+
+    private List<String> extractKeyPoints(String aiResponse) {
+        List<String> keyPoints = new ArrayList<>();
+
+        for (String line : aiResponse.lines().toList()) {
+            String trimmedLine = line.trim();
+            if (isBulletPoint(trimmedLine)) {
+                keyPoints.add(trimmedLine.substring(1).trim());
+            }
+        }
+
+        return keyPoints;
+    }
+
+    private boolean isBulletPoint(String line) {
+        return line.startsWith("-") || line.startsWith("*") || line.startsWith("•");
     }
 }

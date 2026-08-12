@@ -2,6 +2,7 @@ package com.example.ai_service.controller;
 
 import java.io.IOException;
 
+import com.example.ai_service.dto.SummaryResponse;
 import com.example.ai_service.service.DocumentService;
 
 import org.springframework.web.bind.annotation.PostMapping;
@@ -21,7 +22,7 @@ public class DocumentController {
     }
 
     @PostMapping("/summarize")
-    public String summarize(@RequestParam("file") MultipartFile file) throws IOException {
+    public SummaryResponse summarize(@RequestParam("file") MultipartFile file) throws IOException {
         return documentService.summarizeDocument(file);
     }
 }
