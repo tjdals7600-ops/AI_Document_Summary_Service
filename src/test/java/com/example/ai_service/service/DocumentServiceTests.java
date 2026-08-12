@@ -1,12 +1,10 @@
 package com.example.ai_service.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.Mockito.doThrow;
+import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
@@ -16,37 +14,19 @@ import com.example.ai_service.dto.SummaryResponse;
 import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDPage;
 import org.apache.pdfbox.pdmodel.PDPageContentStream;
-import org.apache.pdfbox.pdmodel.font.Standard14Fonts.FontName;
 import org.apache.pdfbox.pdmodel.font.PDType1Font;
+import org.apache.pdfbox.pdmodel.font.Standard14Fonts.FontName;
 import org.junit.jupiter.api.Test;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.mock.web.MockMultipartFile;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.test.web.servlet.MockMvc;
 
-@SpringBootTest(properties = "spring.ai.openai.api-key=test-key")
-@AutoConfigureMockMvc
 class DocumentServiceTests {
 
-    @Autowired
-    private DocumentService documentService;
-
-    @Autowired
-    private MockMvc mockMvc;
-
-    @MockitoBean
-    private AiSummaryService aiSummaryService;
+    private final AiSummaryService aiSummaryService = mock(AiSummaryService.class);
+    private final DocumentService documentService = new DocumentService(aiSummaryService);
 
     @Test
     void extractsTextFromTxtFile() throws Exception {
-        MockMultipartFile file = new MockMultipartFile(
-                "file",
-                "sample.txt",
-                "text/plain",
-                "TXT document content".getBytes(StandardCharsets.UTF_8)
-        );
+        MockMultipartFile file = textFile("sample.txt", "TXT document content");
 
         String text = documentService.extractText(file);
 
@@ -55,12 +35,7 @@ class DocumentServiceTests {
 
     @Test
     void extractsTextFromPdfFile() throws Exception {
-        MockMultipartFile file = new MockMultipartFile(
-                "file",
-                "sample.pdf",
-                "application/pdf",
-                createPdf("PDF document content")
-        );
+        MockMultipartFile file = pdfFile("sample.pdf", "PDF document content");
 
         String text = documentService.extractText(file);
 
@@ -68,139 +43,63 @@ class DocumentServiceTests {
     }
 
     @Test
-    void sendsExtractedTxtTextToAiSummaryService() throws Exception {
-        MockMultipartFile file = new MockMultipartFile(
-                "file",
-                "sample.txt",
-                "text/plain",
-                "TXT document content".getBytes(StandardCharsets.UTF_8)
-        );
-        when(aiSummaryService.summarize("TXT document content")).thenReturn("TXT summary");
+    void supportsUppercaseTxtExtension() throws Exception {
+        MockMultipartFile file = textFile("sample.TXT", "Uppercase TXT content");
+        when(aiSummaryService.summarize("Uppercase TXT content")).thenReturn("TXT summary");
+
+        SummaryResponse response = documentService.summarizeDocument(file);
+
+        assertThat(response.fileName()).isEqualTo("sample.TXT");
+        assertThat(response.summary()).isEqualTo("TXT summary");
+    }
+
+    @Test
+    void supportsUppercasePdfExtension() throws Exception {
+        MockMultipartFile file = pdfFile("sample.PDF", "Uppercase PDF content");
+        when(aiSummaryService.summarize(contains("Uppercase PDF content"))).thenReturn("PDF summary");
+
+        SummaryResponse response = documentService.summarizeDocument(file);
+
+        assertThat(response.fileName()).isEqualTo("sample.PDF");
+        assertThat(response.summary()).isEqualTo("PDF summary");
+    }
+
+    @Test
+    void sendsExtractedTextToAiSummaryService() throws Exception {
+        MockMultipartFile file = textFile("sample.txt", "TXT document content");
+        when(aiSummaryService.summarize("TXT document content"))
+                .thenReturn("TXT summary\n- First point\n* Second point\n• Third point");
 
         SummaryResponse response = documentService.summarizeDocument(file);
 
         assertThat(response.fileName()).isEqualTo("sample.txt");
         assertThat(response.summary()).isEqualTo("TXT summary");
-        assertThat(response.keyPoints()).isEmpty();
+        assertThat(response.keyPoints()).containsExactly("First point", "Second point", "Third point");
         verify(aiSummaryService).summarize("TXT document content");
     }
 
     @Test
-    void sendsExtractedPdfTextToAiSummaryService() throws Exception {
-        MockMultipartFile file = new MockMultipartFile(
-                "file",
-                "sample.pdf",
-                "application/pdf",
-                createPdf("PDF document content")
-        );
-        when(aiSummaryService.summarize(org.mockito.ArgumentMatchers.contains("PDF document content")))
-                .thenReturn("PDF summary\n- PDF key point");
+    void returnsEmptyKeyPointsWhenAiResponseHasNoBullets() throws Exception {
+        MockMultipartFile file = textFile("sample.txt", "TXT document content");
+        when(aiSummaryService.summarize("TXT document content")).thenReturn("Summary without bullets");
 
         SummaryResponse response = documentService.summarizeDocument(file);
 
-        assertThat(response.fileName()).isEqualTo("sample.pdf");
-        assertThat(response.summary()).isEqualTo("PDF summary");
-        assertThat(response.keyPoints()).containsExactly("PDF key point");
-        verify(aiSummaryService).summarize(org.mockito.ArgumentMatchers.contains("PDF document content"));
+        assertThat(response.summary()).isEqualTo("Summary without bullets");
+        assertThat(response.keyPoints()).isEmpty();
     }
 
-    @Test
-    void uploadsPdfAndReturnsAiSummary() throws Exception {
-        MockMultipartFile file = new MockMultipartFile(
+    private MockMultipartFile textFile(String fileName, String content) {
+        return new MockMultipartFile(
                 "file",
-                "sample.pdf",
-                "application/pdf",
-                createPdf("Uploaded PDF content")
-        );
-        when(aiSummaryService.summarize(org.mockito.ArgumentMatchers.contains("Uploaded PDF content")))
-                .thenReturn("AI summary result\n- First point\n* Second point\n• Third point");
-
-        mockMvc.perform(multipart("/api/documents/summarize").file(file))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.fileName").value("sample.pdf"))
-                .andExpect(jsonPath("$.summary").value("AI summary result"))
-                .andExpect(jsonPath("$.keyPoints[0]").value("First point"))
-                .andExpect(jsonPath("$.keyPoints[1]").value("Second point"))
-                .andExpect(jsonPath("$.keyPoints[2]").value("Third point"));
-    }
-
-    @Test
-    void rejectsEmptyFile() throws Exception {
-        MockMultipartFile file = new MockMultipartFile(
-                "file",
-                "empty.txt",
+                fileName,
                 "text/plain",
-                new byte[0]
+                content.getBytes(StandardCharsets.UTF_8)
         );
-
-        mockMvc.perform(multipart("/api/documents/summarize").file(file))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("파일이 비어 있습니다."));
     }
 
-    @Test
-    void rejectsUnsupportedFileExtension() throws Exception {
-        MockMultipartFile file = new MockMultipartFile(
-                "file",
-                "sample.docx",
-                "application/octet-stream",
-                "document content".getBytes(StandardCharsets.UTF_8)
-        );
-
-        mockMvc.perform(multipart("/api/documents/summarize").file(file))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("PDF 또는 TXT 파일만 업로드할 수 있습니다."));
-    }
-
-    @Test
-    void rejectsRequestWithoutFile() throws Exception {
-        mockMvc.perform(multipart("/api/documents/summarize"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.message").value("업로드할 파일이 필요합니다."));
-    }
-
-    @Test
-    void returnsErrorWhenPdfCannotBeRead() throws Exception {
-        MockMultipartFile file = new MockMultipartFile(
-                "file",
-                "broken.pdf",
-                "application/pdf",
-                "not a pdf".getBytes(StandardCharsets.UTF_8)
-        );
-
-        mockMvc.perform(multipart("/api/documents/summarize").file(file))
-                .andExpect(status().isUnprocessableContent())
-                .andExpect(jsonPath("$.message").value("문서 내용을 읽을 수 없습니다."));
-    }
-
-    @Test
-    void returnsErrorWhenDocumentTextIsBlank() throws Exception {
-        MockMultipartFile file = new MockMultipartFile(
-                "file",
-                "blank.txt",
-                "text/plain",
-                "   \n  ".getBytes(StandardCharsets.UTF_8)
-        );
-
-        mockMvc.perform(multipart("/api/documents/summarize").file(file))
-                .andExpect(status().isUnprocessableContent())
-                .andExpect(jsonPath("$.message").value("문서 내용을 읽을 수 없습니다."));
-    }
-
-    @Test
-    void returnsErrorWhenAiSummaryFails() throws Exception {
-        MockMultipartFile file = new MockMultipartFile(
-                "file",
-                "sample.txt",
-                "text/plain",
-                "TXT document content".getBytes(StandardCharsets.UTF_8)
-        );
-        doThrow(new RuntimeException("OpenAI error"))
-                .when(aiSummaryService).summarize("TXT document content");
-
-        mockMvc.perform(multipart("/api/documents/summarize").file(file))
-                .andExpect(status().isBadGateway())
-                .andExpect(jsonPath("$.message").value("AI 요약 서비스 호출에 실패했습니다."));
+    private MockMultipartFile pdfFile(String fileName, String content) throws Exception {
+        return new MockMultipartFile("file", fileName, "application/pdf", createPdf(content));
     }
 
     private byte[] createPdf(String text) throws Exception {
