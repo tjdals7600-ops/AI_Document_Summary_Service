@@ -20,7 +20,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 
-@SpringBootTest
+@SpringBootTest(properties = "spring.ai.openai.api-key=test-key")
 @AutoConfigureMockMvc
 class DocumentServiceTests {
 
