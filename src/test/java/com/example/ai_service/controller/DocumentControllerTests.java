@@ -1,6 +1,7 @@
 package com.example.ai_service.controller;
 
 import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
@@ -12,6 +13,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 import com.example.ai_service.dto.AiSummaryResult;
+import com.example.ai_service.dto.SummaryFormat;
+import com.example.ai_service.dto.SummaryLength;
 import com.example.ai_service.service.AiSummaryService;
 
 import org.apache.pdfbox.pdmodel.PDDocument;
@@ -40,20 +43,25 @@ class DocumentControllerTests {
     @Test
     void uploadsTxtAndReturnsSummaryJson() throws Exception {
         MockMultipartFile file = textFile("sample.txt", "TXT document content");
-        when(aiSummaryService.summarize("TXT document content"))
+        when(aiSummaryService.summarize("TXT document content", SummaryLength.SHORT, SummaryFormat.FULL))
                 .thenReturn(new AiSummaryResult("TXT summary", List.of("TXT key point")));
 
         mockMvc.perform(multipart("/api/documents/summarize").file(file))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.fileName").value("sample.txt"))
                 .andExpect(jsonPath("$.summary").value("TXT summary"))
-                .andExpect(jsonPath("$.keyPoints[0]").value("TXT key point"));
+                .andExpect(jsonPath("$.keyPoints[0]").value("TXT key point"))
+                .andExpect(jsonPath("$.characterCount").value(20));
     }
 
     @Test
     void uploadsPdfAndReturnsSummaryJson() throws Exception {
         MockMultipartFile file = pdfFile("sample.pdf", "PDF document content");
-        when(aiSummaryService.summarize(contains("PDF document content")))
+        when(aiSummaryService.summarize(
+                contains("PDF document content"),
+                eq(SummaryLength.SHORT),
+                eq(SummaryFormat.FULL)
+        ))
                 .thenReturn(new AiSummaryResult("PDF summary", List.of("PDF key point")));
 
         mockMvc.perform(multipart("/api/documents/summarize").file(file))
@@ -61,6 +69,52 @@ class DocumentControllerTests {
                 .andExpect(jsonPath("$.fileName").value("sample.pdf"))
                 .andExpect(jsonPath("$.summary").value("PDF summary"))
                 .andExpect(jsonPath("$.keyPoints[0]").value("PDF key point"));
+    }
+
+    @Test
+    void supportsDetailedSummaryOption() throws Exception {
+        MockMultipartFile file = textFile("sample.txt", "Detailed document");
+        when(aiSummaryService.summarize(
+                "Detailed document",
+                SummaryLength.DETAILED,
+                SummaryFormat.FULL
+        )).thenReturn(new AiSummaryResult("Detailed summary", List.of("Detailed point")));
+
+        mockMvc.perform(multipart("/api/documents/summarize")
+                        .file(file)
+                        .param("length", "DETAILED")
+                        .param("format", "FULL"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.summary").value("Detailed summary"))
+                .andExpect(jsonPath("$.characterCount").value(17));
+    }
+
+    @Test
+    void supportsKeyPointsOnlyOption() throws Exception {
+        MockMultipartFile file = textFile("sample.txt", "Key point document");
+        when(aiSummaryService.summarize(
+                "Key point document",
+                SummaryLength.SHORT,
+                SummaryFormat.KEY_POINTS
+        )).thenReturn(new AiSummaryResult("", List.of("Only point")));
+
+        mockMvc.perform(multipart("/api/documents/summarize")
+                        .file(file)
+                        .param("format", "KEY_POINTS"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.summary").value(""))
+                .andExpect(jsonPath("$.keyPoints[0]").value("Only point"));
+    }
+
+    @Test
+    void rejectsInvalidSummaryOption() throws Exception {
+        MockMultipartFile file = textFile("sample.txt", "Document content");
+
+        mockMvc.perform(multipart("/api/documents/summarize")
+                        .file(file)
+                        .param("length", "MEDIUM"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("요약 옵션이 올바르지 않습니다."));
     }
 
     @Test
@@ -138,7 +192,11 @@ class DocumentControllerTests {
     void returnsErrorWhenAiSummaryFails() throws Exception {
         MockMultipartFile file = textFile("sample.txt", "TXT document content");
         doThrow(new RuntimeException("OpenAI error"))
-                .when(aiSummaryService).summarize("TXT document content");
+                .when(aiSummaryService).summarize(
+                        "TXT document content",
+                        SummaryLength.SHORT,
+                        SummaryFormat.FULL
+                );
 
         mockMvc.perform(multipart("/api/documents/summarize").file(file))
                 .andExpect(status().isBadGateway())

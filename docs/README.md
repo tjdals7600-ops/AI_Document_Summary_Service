@@ -264,6 +264,20 @@ Request:
 ```text
 Content-Type: multipart/form-data
 file: PDF 또는 TXT 파일
+length: SHORT 또는 DETAILED (선택, 기본값 SHORT)
+format: FULL 또는 KEY_POINTS (선택, 기본값 FULL)
+```
+
+`KEY_POINTS`를 선택하면 `summary`는 빈 문자열이고 `keyPoints`에 핵심 내용만 반환됩니다.
+
+요청 예시:
+
+```powershell
+curl.exe -X POST `
+  -F "file=@C:\문서\example.txt" `
+  -F "length=DETAILED" `
+  -F "format=FULL" `
+  http://localhost:8080/api/documents/summarize
 ```
 
 요청 제한:
@@ -281,7 +295,8 @@ Response:
     "핵심 내용 1",
     "핵심 내용 2",
     "핵심 내용 3"
-  ]
+  ],
+  "characterCount": 1250
 }
 ```
 
@@ -441,9 +456,9 @@ AI API 오류
 
 ### Level 2
 
-- 짧게 요약 / 자세히 요약 선택
-- 핵심 포인트만 추출
-- 문서 글자 수 표시
+- [x] 짧게 요약 / 자세히 요약 선택
+- [x] 핵심 포인트만 추출
+- [x] 문서 글자 수 표시
 
 ### Level 3
 

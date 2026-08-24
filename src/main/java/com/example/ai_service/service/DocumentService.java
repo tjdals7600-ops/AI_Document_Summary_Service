@@ -5,6 +5,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 
 import com.example.ai_service.dto.AiSummaryResult;
+import com.example.ai_service.dto.SummaryFormat;
+import com.example.ai_service.dto.SummaryLength;
 import com.example.ai_service.dto.SummaryResponse;
 
 import org.apache.pdfbox.Loader;
@@ -26,21 +28,31 @@ public class DocumentService {
     }
 
     public SummaryResponse summarizeDocument(MultipartFile file) throws IOException {
+        return summarizeDocument(file, SummaryLength.SHORT, SummaryFormat.FULL);
+    }
+
+    public SummaryResponse summarizeDocument(
+            MultipartFile file,
+            SummaryLength length,
+            SummaryFormat format
+    ) throws IOException {
         validateFile(file);
         String documentText = extractText(file);
         validateDocumentText(documentText);
 
         AiSummaryResult aiResult;
         try {
-            aiResult = aiSummaryService.summarize(documentText);
+            aiResult = aiSummaryService.summarize(documentText, length, format);
         } catch (RuntimeException exception) {
             throw new IllegalStateException("AI 요약 서비스 호출에 실패했습니다.", exception);
         }
 
+        String summary = format == SummaryFormat.KEY_POINTS ? "" : aiResult.summary();
         return new SummaryResponse(
                 file.getOriginalFilename(),
-                aiResult.summary(),
-                aiResult.keyPoints()
+                summary,
+                aiResult.keyPoints(),
+                documentText.length()
         );
     }
 
