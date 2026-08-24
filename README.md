@@ -5,5 +5,7 @@ PDF 또는 TXT 문서를 업로드하면 텍스트를 추출하고 OpenAI API로
 실행 방법, API 예제, 오류 응답과 구현 범위는 [상세 README](docs/README.md)를 참고하세요.
 
 ```text
-파일 업로드 → 텍스트 추출 → OpenAI 구조화 요약 → JSON 응답
+파일 업로드 → 텍스트 추출 → 요약 옵션 적용 → OpenAI 구조화 요약 → JSON 응답
 ```
+
+요약 길이는 `SHORT`/`DETAILED`, 출력 형식은 `FULL`/`KEY_POINTS` 중 선택할 수 있으며 응답에는 추출된 문서 글자 수도 포함됩니다.

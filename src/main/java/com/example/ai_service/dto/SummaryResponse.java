@@ -5,6 +5,7 @@ import java.util.List;
 public record SummaryResponse(
         String fileName,
         String summary,
-        List<String> keyPoints
+        List<String> keyPoints,
+        int characterCount
 ) {
 }

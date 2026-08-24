@@ -8,6 +8,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.multipart.support.MissingServletRequestPartException;
 
@@ -28,6 +29,14 @@ public class GlobalExceptionHandler {
     public ResponseEntity<Map<String, String>> handleFileSizeExceeded(MaxUploadSizeExceededException exception) {
         return ResponseEntity.status(HttpStatus.CONTENT_TOO_LARGE)
                 .body(Map.of("message", "파일 크기는 10MB를 초과할 수 없습니다."));
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<Map<String, String>> handleInvalidSummaryOption(
+            MethodArgumentTypeMismatchException exception
+    ) {
+        return ResponseEntity.badRequest()
+                .body(Map.of("message", "요약 옵션이 올바르지 않습니다."));
     }
 
     @ExceptionHandler(IOException.class)

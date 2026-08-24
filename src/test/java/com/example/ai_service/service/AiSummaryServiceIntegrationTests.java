@@ -3,6 +3,8 @@ package com.example.ai_service.service;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.example.ai_service.dto.AiSummaryResult;
+import com.example.ai_service.dto.SummaryFormat;
+import com.example.ai_service.dto.SummaryLength;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
@@ -19,10 +21,12 @@ class AiSummaryServiceIntegrationTests {
     @Test
     void summarizesTextWithOpenAi() {
         AiSummaryResult result = aiSummaryService.summarize(
-                "Spring Boot는 자바 기반 애플리케이션을 간단하게 실행할 수 있도록 도와준다."
+                "Spring Boot는 자바 기반 애플리케이션을 간단하게 실행할 수 있도록 도와준다.",
+                SummaryLength.SHORT,
+                SummaryFormat.KEY_POINTS
         );
 
-        assertThat(result.summary()).isNotBlank();
-        assertThat(result.keyPoints()).isNotNull();
+        assertThat(result.summary()).isEmpty();
+        assertThat(result.keyPoints()).isNotEmpty();
     }
 }

@@ -2,6 +2,7 @@ package com.example.ai_service.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.contains;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -11,6 +12,8 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 import com.example.ai_service.dto.AiSummaryResult;
+import com.example.ai_service.dto.SummaryFormat;
+import com.example.ai_service.dto.SummaryLength;
 import com.example.ai_service.dto.SummaryResponse;
 
 import org.apache.pdfbox.pdmodel.PDDocument;
@@ -47,7 +50,11 @@ class DocumentServiceTests {
     @Test
     void supportsUppercaseTxtExtension() throws Exception {
         MockMultipartFile file = textFile("sample.TXT", "Uppercase TXT content");
-        when(aiSummaryService.summarize("Uppercase TXT content"))
+        when(aiSummaryService.summarize(
+                "Uppercase TXT content",
+                SummaryLength.SHORT,
+                SummaryFormat.FULL
+        ))
                 .thenReturn(new AiSummaryResult("TXT summary", List.of()));
 
         SummaryResponse response = documentService.summarizeDocument(file);
@@ -59,7 +66,11 @@ class DocumentServiceTests {
     @Test
     void supportsUppercasePdfExtension() throws Exception {
         MockMultipartFile file = pdfFile("sample.PDF", "Uppercase PDF content");
-        when(aiSummaryService.summarize(contains("Uppercase PDF content")))
+        when(aiSummaryService.summarize(
+                contains("Uppercase PDF content"),
+                eq(SummaryLength.SHORT),
+                eq(SummaryFormat.FULL)
+        ))
                 .thenReturn(new AiSummaryResult("PDF summary", List.of()));
 
         SummaryResponse response = documentService.summarizeDocument(file);
@@ -71,7 +82,11 @@ class DocumentServiceTests {
     @Test
     void sendsExtractedTextToAiSummaryService() throws Exception {
         MockMultipartFile file = textFile("sample.txt", "TXT document content");
-        when(aiSummaryService.summarize("TXT document content"))
+        when(aiSummaryService.summarize(
+                "TXT document content",
+                SummaryLength.SHORT,
+                SummaryFormat.FULL
+        ))
                 .thenReturn(new AiSummaryResult(
                         "TXT summary",
                         List.of("First point", "Second point", "Third point")
@@ -82,19 +97,48 @@ class DocumentServiceTests {
         assertThat(response.fileName()).isEqualTo("sample.txt");
         assertThat(response.summary()).isEqualTo("TXT summary");
         assertThat(response.keyPoints()).containsExactly("First point", "Second point", "Third point");
-        verify(aiSummaryService).summarize("TXT document content");
+        assertThat(response.characterCount()).isEqualTo(20);
+        verify(aiSummaryService).summarize(
+                "TXT document content",
+                SummaryLength.SHORT,
+                SummaryFormat.FULL
+        );
     }
 
     @Test
     void returnsEmptyKeyPointsFromStructuredAiResult() throws Exception {
         MockMultipartFile file = textFile("sample.txt", "TXT document content");
-        when(aiSummaryService.summarize("TXT document content"))
+        when(aiSummaryService.summarize(
+                "TXT document content",
+                SummaryLength.SHORT,
+                SummaryFormat.FULL
+        ))
                 .thenReturn(new AiSummaryResult("Summary without key points", List.of()));
 
         SummaryResponse response = documentService.summarizeDocument(file);
 
         assertThat(response.summary()).isEqualTo("Summary without key points");
         assertThat(response.keyPoints()).isEmpty();
+    }
+
+    @Test
+    void returnsOnlyKeyPointsForKeyPointsFormat() throws Exception {
+        MockMultipartFile file = textFile("sample.txt", "Document content");
+        when(aiSummaryService.summarize(
+                "Document content",
+                SummaryLength.DETAILED,
+                SummaryFormat.KEY_POINTS
+        )).thenReturn(new AiSummaryResult("Unexpected summary", List.of("First", "Second")));
+
+        SummaryResponse response = documentService.summarizeDocument(
+                file,
+                SummaryLength.DETAILED,
+                SummaryFormat.KEY_POINTS
+        );
+
+        assertThat(response.summary()).isEmpty();
+        assertThat(response.keyPoints()).containsExactly("First", "Second");
+        assertThat(response.characterCount()).isEqualTo(16);
     }
 
     @Test
