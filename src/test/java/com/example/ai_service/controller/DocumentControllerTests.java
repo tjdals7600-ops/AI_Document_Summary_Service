@@ -9,7 +9,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 
+import com.example.ai_service.dto.AiSummaryResult;
 import com.example.ai_service.service.AiSummaryService;
 
 import org.apache.pdfbox.pdmodel.PDDocument;
@@ -39,7 +41,7 @@ class DocumentControllerTests {
     void uploadsTxtAndReturnsSummaryJson() throws Exception {
         MockMultipartFile file = textFile("sample.txt", "TXT document content");
         when(aiSummaryService.summarize("TXT document content"))
-                .thenReturn("TXT summary\n- TXT key point");
+                .thenReturn(new AiSummaryResult("TXT summary", List.of("TXT key point")));
 
         mockMvc.perform(multipart("/api/documents/summarize").file(file))
                 .andExpect(status().isOk())
@@ -52,7 +54,7 @@ class DocumentControllerTests {
     void uploadsPdfAndReturnsSummaryJson() throws Exception {
         MockMultipartFile file = pdfFile("sample.pdf", "PDF document content");
         when(aiSummaryService.summarize(contains("PDF document content")))
-                .thenReturn("PDF summary\n- PDF key point");
+                .thenReturn(new AiSummaryResult("PDF summary", List.of("PDF key point")));
 
         mockMvc.perform(multipart("/api/documents/summarize").file(file))
                 .andExpect(status().isOk())
@@ -121,6 +123,15 @@ class DocumentControllerTests {
         mockMvc.perform(multipart("/api/documents/summarize").file(file))
                 .andExpect(status().isUnprocessableContent())
                 .andExpect(jsonPath("$.message").value("문서 내용을 읽을 수 없습니다."));
+    }
+
+    @Test
+    void rejectsDocumentLongerThanFiftyThousandCharacters() throws Exception {
+        MockMultipartFile file = textFile("large.txt", "a".repeat(50_001));
+
+        mockMvc.perform(multipart("/api/documents/summarize").file(file))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("문서 내용은 50,000자를 초과할 수 없습니다."));
     }
 
     @Test

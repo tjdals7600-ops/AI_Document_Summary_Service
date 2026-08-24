@@ -1,6 +1,6 @@
 # AI Document Summary API
 
-문서를 업로드하면 AI가 핵심 내용을 요약해 주는 ** AI 백엔드 프로젝트**입니다.
+문서를 업로드하면 AI가 핵심 내용을 요약해 주는 **AI 백엔드 프로젝트**입니다.
 
 이 프로젝트의 핵심 목표는 복잡한 AI 기술을 많이 사용하는 것이 아니라,
 
@@ -27,6 +27,49 @@ OpenAI API
   ↓
 요약 결과 반환
 ```
+
+처음부터 로그인, Redis, Vector DB, RAG, Docker 같은 기능은 넣지 않습니다.
+
+**1차 목표는 문서 요약 API 하나를 끝까지 완성하는 것입니다.**
+
+---
+
+## 빠른 실행
+
+준비 사항:
+
+- Java 21
+- OpenAI API Key
+
+PowerShell에서 API Key를 사용자 환경 변수로 등록합니다.
+
+```powershell
+[Environment]::SetEnvironmentVariable("OPENAI_API_KEY", "본인의_API_KEY", "User")
+```
+
+환경 변수를 등록한 뒤에는 새 PowerShell을 열고 서버를 실행합니다.
+
+```powershell
+.\gradlew.bat bootRun
+```
+
+다른 PowerShell에서 TXT 또는 PDF 파일을 업로드합니다.
+
+```powershell
+curl.exe -X POST `
+  -F "file=@C:\문서\example.txt" `
+  http://localhost:8080/api/documents/summarize
+```
+
+전체 테스트는 다음 명령으로 실행합니다.
+
+```powershell
+.\gradlew.bat cleanTest test
+```
+
+`OPENAI_API_KEY`가 설정된 환경에서는 실제 OpenAI 통합 테스트도 실행됩니다. API Key가 없으면 해당 테스트만 자동으로 건너뜁니다.
+
+---
 
 ## 2. 프로젝트 목표
 
@@ -77,20 +120,20 @@ String
 
 ### 3.3 AI 요약
 
-추출한 문자열을 OpenAI API에 전달합니다.
-
-예시 Prompt:
+요약 규칙은 `system` 메시지로, 실제 문서 내용은 `user` 메시지로 분리해 OpenAI API에 전달합니다.
 
 ```text
-아래 문서를 한국어로 이해하기 쉽게 요약해 줘.
+system: 한국어 문서 요약 규칙
+user: 업로드한 문서에서 추출한 텍스트
+```
 
-조건:
-1. 핵심 내용 위주로 요약
-2. 중요한 내용은 bullet point로 정리
-3. 너무 길게 작성하지 않기
+AI 응답은 JSON Schema 기반 Structured Output으로 받습니다.
 
-문서:
-{documentText}
+```json
+{
+  "summary": "문서 요약",
+  "keyPoints": ["핵심 내용 1", "핵심 내용 2"]
+}
 ```
 
 ### 3.4 JSON 응답
@@ -115,11 +158,11 @@ String
 | 구분 | 기술 | 이유 |
 |---|---|---|
 | Language | Java 21 | 익숙한 Java 사용 |
-| Framework | Spring Boot | REST API 개발 |
+| Framework | Spring Boot 4.1 | REST API 개발 |
 | Build Tool | Gradle | 의존성 관리 |
 | Web | Spring Web | Controller 및 HTTP API |
-| PDF | Apache PDFBox | PDF 텍스트 추출 |
-| AI | OpenAI API + Spring AI | AI 호출을 단순화 |
+| PDF | Apache PDFBox 3.0 | PDF 텍스트 추출 |
+| AI | OpenAI API + Spring AI 2.0 | AI 호출과 구조화 응답 |
 | Test | JUnit 5 | 기본 테스트 |
 
 ### 1차 MVP에서 사용하지 않는 기술
@@ -169,14 +212,15 @@ String
 src
 └─ main
    └─ java
-      └─ com.example.documentsummary
-         ├─ DocumentSummaryApplication.java
+      └─ com.example.ai_service
+         ├─ AiServiceApplication.java
          ├─ controller
          │  └─ DocumentController.java
          ├─ service
          │  ├─ DocumentService.java
          │  └─ AiSummaryService.java
          ├─ dto
+         │  ├─ AiSummaryResult.java
          │  └─ SummaryResponse.java
          └─ exception
             └─ GlobalExceptionHandler.java
@@ -196,8 +240,11 @@ src
 
 **AiSummaryService**
 - OpenAI API 호출
-- Prompt 생성
-- AI 응답 받기
+- system/user 메시지 분리
+- JSON Schema 구조화 응답 생성 및 검사
+
+**AiSummaryResult**
+- OpenAI가 반환할 요약문과 핵심 포인트 구조 정의
 
 **SummaryResponse**
 - 클라이언트에 반환할 JSON 구조 정의
@@ -218,6 +265,11 @@ Request:
 Content-Type: multipart/form-data
 file: PDF 또는 TXT 파일
 ```
+
+요청 제한:
+
+- 파일 크기: 최대 10MB
+- 추출된 문서 내용: 최대 50,000자
 
 Response:
 
@@ -246,7 +298,7 @@ MVP에서는 이 API 하나만 먼저 구현합니다.
 4. PDF/TXT에서 텍스트 추출
 5. AiSummaryService에 텍스트 전달
 6. OpenAI API 호출
-7. AI 요약 결과 받기
+7. JSON Schema에 맞는 AI 요약 결과 받기
 8. SummaryResponse 생성
 9. JSON 반환
 ```
@@ -265,7 +317,7 @@ Spring AI OpenAI
 JUnit 5
 ```
 
-OpenAI 관련 라이브러리는 프로젝트의 Spring Boot 버전과 호환되는 버전을 사용합니다.
+Spring AI의 JSON Schema 기반 구조화 응답을 사용하므로 요약문과 핵심 포인트를 문자열 규칙으로 다시 파싱하지 않습니다.
 
 ---
 
@@ -279,13 +331,11 @@ API Key를 코드에 직접 작성하지 않습니다.
 String apiKey = "sk-xxxx";
 ```
 
-`application.yml`에서는 환경 변수를 사용합니다.
+`application.properties`에서는 환경 변수를 사용합니다.
 
-```yaml
-spring:
-  ai:
-    openai:
-      api-key: ${OPENAI_API_KEY}
+```properties
+spring.ai.openai.api-key=${OPENAI_API_KEY}
+spring.ai.openai.chat.model=${OPENAI_MODEL:gpt-5-mini}
 ```
 
 실행 환경에는 다음 값을 설정합니다.
@@ -296,16 +346,20 @@ OPENAI_API_KEY=본인의_API_KEY
 
 실제 Key가 들어간 파일은 GitHub에 올리지 않습니다.
 
+기본 모델은 `gpt-5-mini`이며, 필요한 경우 `OPENAI_MODEL` 환경 변수로 변경할 수 있습니다. 출력은 최대 800 completion token, 요청 시간은 60초, 재시도는 최대 2회로 제한합니다.
+
 ---
 
 ## 11. 기본 예외 처리
 
-처음에는 아래 정도만 처리합니다.
-
-- 파일이 비어 있음
-- PDF/TXT가 아닌 파일
-- 문서 내용을 읽지 못함
-- AI API 호출 실패
+| 상황 | HTTP 상태 | 메시지 |
+|---|---:|---|
+| 파일 누락 또는 빈 파일 | 400 | 업로드할 파일이 필요합니다. / 파일이 비어 있습니다. |
+| PDF/TXT가 아닌 파일 | 400 | PDF 또는 TXT 파일만 업로드할 수 있습니다. |
+| 문서가 50,000자를 초과함 | 400 | 문서 내용은 50,000자를 초과할 수 없습니다. |
+| 파일이 10MB를 초과함 | 413 | 파일 크기는 10MB를 초과할 수 없습니다. |
+| 문서 내용을 읽지 못함 | 422 | 문서 내용을 읽을 수 없습니다. |
+| AI API 호출 실패 | 502 | AI 요약 서비스 호출에 실패했습니다. |
 
 예시:
 
@@ -369,16 +423,16 @@ AI API 오류
 
 ## 13. MVP 완료 기준
 
-- [ ] Spring Boot 서버가 실행된다.
-- [ ] PDF를 업로드할 수 있다.
-- [ ] TXT를 업로드할 수 있다.
-- [ ] PDF에서 텍스트를 추출할 수 있다.
-- [ ] TXT에서 텍스트를 읽을 수 있다.
-- [ ] OpenAI API를 호출할 수 있다.
-- [ ] AI가 문서를 요약한다.
-- [ ] 요약 결과를 JSON으로 반환한다.
-- [ ] 잘못된 파일 요청을 처리한다.
-- [ ] API Key가 Git에 노출되지 않는다.
+- [x] Spring Boot 서버가 실행된다.
+- [x] PDF를 업로드할 수 있다.
+- [x] TXT를 업로드할 수 있다.
+- [x] PDF에서 텍스트를 추출할 수 있다.
+- [x] TXT에서 텍스트를 읽을 수 있다.
+- [x] OpenAI API를 호출할 수 있다.
+- [x] AI가 문서를 요약한다.
+- [x] 요약 결과를 JSON으로 반환한다.
+- [x] 잘못된 파일 요청을 처리한다.
+- [x] API Key가 Git에 노출되지 않는다.
 
 
 ---
