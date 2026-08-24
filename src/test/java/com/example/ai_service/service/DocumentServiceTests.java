@@ -8,7 +8,9 @@ import static org.mockito.Mockito.when;
 
 import java.io.ByteArrayOutputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 
+import com.example.ai_service.dto.AiSummaryResult;
 import com.example.ai_service.dto.SummaryResponse;
 
 import org.apache.pdfbox.pdmodel.PDDocument;
@@ -45,7 +47,8 @@ class DocumentServiceTests {
     @Test
     void supportsUppercaseTxtExtension() throws Exception {
         MockMultipartFile file = textFile("sample.TXT", "Uppercase TXT content");
-        when(aiSummaryService.summarize("Uppercase TXT content")).thenReturn("TXT summary");
+        when(aiSummaryService.summarize("Uppercase TXT content"))
+                .thenReturn(new AiSummaryResult("TXT summary", List.of()));
 
         SummaryResponse response = documentService.summarizeDocument(file);
 
@@ -56,7 +59,8 @@ class DocumentServiceTests {
     @Test
     void supportsUppercasePdfExtension() throws Exception {
         MockMultipartFile file = pdfFile("sample.PDF", "Uppercase PDF content");
-        when(aiSummaryService.summarize(contains("Uppercase PDF content"))).thenReturn("PDF summary");
+        when(aiSummaryService.summarize(contains("Uppercase PDF content")))
+                .thenReturn(new AiSummaryResult("PDF summary", List.of()));
 
         SummaryResponse response = documentService.summarizeDocument(file);
 
@@ -68,7 +72,10 @@ class DocumentServiceTests {
     void sendsExtractedTextToAiSummaryService() throws Exception {
         MockMultipartFile file = textFile("sample.txt", "TXT document content");
         when(aiSummaryService.summarize("TXT document content"))
-                .thenReturn("TXT summary\n- First point\n* Second point\n• Third point");
+                .thenReturn(new AiSummaryResult(
+                        "TXT summary",
+                        List.of("First point", "Second point", "Third point")
+                ));
 
         SummaryResponse response = documentService.summarizeDocument(file);
 
@@ -79,14 +86,38 @@ class DocumentServiceTests {
     }
 
     @Test
-    void returnsEmptyKeyPointsWhenAiResponseHasNoBullets() throws Exception {
+    void returnsEmptyKeyPointsFromStructuredAiResult() throws Exception {
         MockMultipartFile file = textFile("sample.txt", "TXT document content");
-        when(aiSummaryService.summarize("TXT document content")).thenReturn("Summary without bullets");
+        when(aiSummaryService.summarize("TXT document content"))
+                .thenReturn(new AiSummaryResult("Summary without key points", List.of()));
 
         SummaryResponse response = documentService.summarizeDocument(file);
 
-        assertThat(response.summary()).isEqualTo("Summary without bullets");
+        assertThat(response.summary()).isEqualTo("Summary without key points");
         assertThat(response.keyPoints()).isEmpty();
+    }
+
+    @Test
+    void rejectsFileLargerThanTenMegabytes() {
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "large.txt",
+                "text/plain",
+                new byte[10 * 1024 * 1024 + 1]
+        );
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> documentService.summarizeDocument(file))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("파일 크기는 10MB를 초과할 수 없습니다.");
+    }
+
+    @Test
+    void rejectsDocumentLongerThanFiftyThousandCharacters() {
+        MockMultipartFile file = textFile("large.txt", "a".repeat(50_001));
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> documentService.summarizeDocument(file))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("문서 내용은 50,000자를 초과할 수 없습니다.");
     }
 
     private MockMultipartFile textFile(String fileName, String content) {
